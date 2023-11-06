@@ -1,27 +1,114 @@
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+/* eslint-disable react/prop-types */
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useDrag, useDrop } from "react-dnd";
 import toast from "react-hot-toast";
 
-const App = () => {
-  
-  const { data: imgs = [], refetch } = useQuery({
-    queryKey: ["images"],
-    queryFn: async () => {
-      const res = await fetch("http://localhost:5000/items");
-      const data = await res.json();
-      return data;
+const Card = ({
+  src,
+  title,
+  id,
+  index,
+  moveImage,
+  handleItemSelection,
+  isSelected,
+}) => {
+  const ref = useRef(null);
+
+  const [, drop] = useDrop({
+    accept: "image",
+    hover: (item, monitor) => {
+      if (!ref.current) {
+        return;
+      }
+
+      const dragIndex = item.index;
+      const hoverIndex = index;
+
+      if (dragIndex === hoverIndex) {
+        return;
+      }
+
+      const hoverBoundingRect = ref.current.getBoundingClientRect();
+      const hoverMiddleY =
+        (hoverBoundingRect.bottom - hoverBoundingRect.top) / 2;
+      const clientOffset = monitor.getClientOffset();
+      const hoverClientY = clientOffset.y - hoverBoundingRect.top;
+
+      if (dragIndex < hoverIndex && hoverClientY < hoverMiddleY) {
+        return;
+      }
+
+      if (dragIndex > hoverIndex && hoverClientY > hoverMiddleY) {
+        return;
+      }
+
+      moveImage(dragIndex, hoverIndex);
+
+      item.index = hoverIndex;
     },
   });
 
-  const [selectedItems, setSelectedItems] = useState([]); // Array to store selected item IDs
-  
-  const handleDelete = async () => {
-    // Check if there are selected items
+  const [{ isDragging }, drag] = useDrag({
+    type: "image",
+    item: () => ({ id, index }),
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  });
+
+  const opacity = isDragging ? 0 : 1;
+  drag(drop(ref));
+
+  return (
+    <div>
+      <div ref={ref} style={{ opacity }} className="card">
+        <img src={src} alt={title} className="w-[250px] h-[250px]" />
+
+        <input
+          className="w-[35px] h-[35px]"
+          type="checkbox"
+          onChange={() => handleItemSelection(id)}
+          checked={isSelected}
+        />
+        
+      </div>
+    </div>
+  );
+};
+
+const App = () => {
+  const [images, setImages] = useState([]);
+  const [selectedItems, setSelectedItems] = useState([]);
+
+  useEffect(() => {
+    fetch("http://localhost:5000/items")
+      .then((response) => response.json())
+      .then((data) => setImages(data));
+  }, []);
+
+  const moveImage = useCallback((dragIndex, hoverIndex) => {
+    setImages((prevImages) => {
+      const clonedImages = [...prevImages];
+      const removedImage = clonedImages.splice(dragIndex, 1)[0];
+      clonedImages.splice(hoverIndex, 0, removedImage);
+      return clonedImages;
+    });
+  }, []);
+
+  const handleItemSelection = (id) => {
+    if (selectedItems.includes(id)) {
+      setSelectedItems((prevSelectedItems) =>
+        prevSelectedItems.filter((itemId) => itemId !== id)
+      );
+    } else {
+      setSelectedItems((prevSelectedItems) => [...prevSelectedItems, id]);
+    }
+  };
+
+  const handleDeleteSelected = async () => {
     if (selectedItems.length > 0) {
-      // Create a copy of selectedItems to ensure consistent behavior
       const itemsToDelete = [...selectedItems];
 
-      // Iterate over selected items and delete them using async/await
       for (const id of itemsToDelete) {
         try {
           const response = await fetch(`http://localhost:5000/items/${id}`, {
@@ -31,9 +118,7 @@ const App = () => {
           if (response.ok) {
             console.log(`Item with ID ${id} deleted successfully.`);
             toast.success(`Item with ID ${id} deleted successfully.`);
-            refetch();
           } else {
-            refetch();
             console.error(
               `Error deleting item with ID ${id}:`,
               response.status
@@ -46,61 +131,37 @@ const App = () => {
         }
       }
 
-      // Clear the selected items
       setSelectedItems([]);
     }
   };
 
-  const handleItemSelection = (id) => {
-    // Check if the item is already selected
-    if (selectedItems.includes(id)) {
-      // If selected, remove it from the list
-      setSelectedItems((prevSelectedItems) =>
-        prevSelectedItems.filter((itemId) => itemId !== id)
-      );
-    } else {
-      // If not selected, add it to the list
-      setSelectedItems((prevSelectedItems) => [...prevSelectedItems, id]);
-    }
-  };
-
   return (
-    <div className="grid grid-cols-5 gap-5 m-20">
+    <div className="p-20 flex flex-col  items-center ">
+      <div className="flex justify-end w-full border-b">
+        {selectedItems.length > 0 && (
+          <button
+            onClick={handleDeleteSelected}
+            className="px-8 py-1 border border-slate-600 text-red-600 text-[20px] font-semibold"
+          >
+            Delete Selected
+          </button>
+        )}
+      </div>
 
-      {imgs?.map((item, i) => (
-        <div
-          key={i}
-          className={`w-[250px] h-[250px] border p-5 flex flex-col justify-between items-center ${
-            selectedItems.includes(item.id)
-              ? "border-red-600"
-              : "border-green-600"
-          }`}
-        >
-          <img src={item.img} alt="" className="w-[100px] h-[100px]" />
-
-          <input
-            className="w-[35px] h-[35px]"
-            type="checkbox"
-            onChange={() => handleItemSelection(item.id)}
-            checked={selectedItems.includes(item.id)}
+      <main className="grid grid-cols-4 gap-10">
+        {images.map((image, index) => (
+          <Card
+            key={image.id}
+            src={image.img}
+            title={image.title}
+            id={image.id}
+            index={index}
+            moveImage={moveImage}
+            handleItemSelection={handleItemSelection}
+            isSelected={selectedItems.includes(image.id)}
           />
-
-
-        </div>
-      ))}
-
-
-
-      {selectedItems.length > 0 && (
-        <button
-          onClick={handleDelete}
-          className="px-8 py-1 border border-red-600"
-        >
-          Delete Selected
-        </button>
-      )}
-
--
+        ))}
+      </main>
     </div>
   );
 };
