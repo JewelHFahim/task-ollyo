@@ -78,10 +78,11 @@ const Card = ({
 
 const App = () => {
   const [images, setImages] = useState([]);
+  console.log(images)
   const [selectedItems, setSelectedItems] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:5000/items")
+    fetch("https://gallery-task-zeta.vercel.app/items")
       .then((response) => response.json())
       .then((data) => setImages(data));
   }, []);
@@ -111,7 +112,7 @@ const App = () => {
 
       for (const id of itemsToDelete) {
         try {
-          const response = await fetch(`http://localhost:5000/items/${id}`, {
+          const response = await fetch(`https://gallery-task-zeta.vercel.app/items/${id}`, {
             method: "DELETE",
           });
 
